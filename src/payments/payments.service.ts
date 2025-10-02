@@ -1,13 +1,18 @@
-import { Injectable } from '@nestjs/common';
-import { envs } from 'src/config';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { envs, NATS_SERVICE } from 'src/config';
 import Stripe from 'stripe'
 import { PaymentSessionDto } from './dto/payment-session';
 import { Request, Response} from 'express';
+import { ClientProxy } from '@nestjs/microservices';
 
 @Injectable()
 export class PaymentsService {
   private readonly stripe = new Stripe(envs.stripeSecret)
+  private readonly logger = new Logger('PaymentService')
 
+  constructor(
+    @Inject(NATS_SERVICE) private readonly client: ClientProxy
+  ){}
   async createPaymentSession(paymentSessionDto: PaymentSessionDto){
     
     const {currency, items, orderId} = paymentSessionDto;
@@ -38,7 +43,11 @@ export class PaymentsService {
       success_url: envs.stripeSuccessUrl,
       cancel_url: envs.stripeCancelUrl,
     });
-    return session;
+    return {
+      cancelUrl: session.cancel_url,
+      successUrl: session.success_url,
+      url: session.url
+    };
   }
 
 
@@ -66,11 +75,18 @@ export class PaymentsService {
     switch(event.type){
       case 'charge.succeeded':
         //LLAMAR MICROSERVICIO
-        const chargeSucceeded = event.data.object
-        console.log({
-          metadata: chargeSucceeded.metadata,
-          orderId: chargeSucceeded.metadata.orderId
-        })
+        const chargeSucceeded = event.data.object;
+        const payload = {
+          stripePaymentId: chargeSucceeded.id, 
+          orderId: chargeSucceeded.metadata.orderId,
+          receiptUrl: chargeSucceeded.receipt_url
+        }
+        // this.logger.log({payload}) 
+        /*
+        Se debe poner a orders a escuchar este evento "emit" (lugares interesados)
+        específicamente en el ordersController
+        */
+        this.client.emit({cmd:'payment.succeeded'}, payload)
       break;
 
       default:

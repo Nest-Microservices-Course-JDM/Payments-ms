@@ -1,14 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PaymentSessionDto } from './dto/payment-session';
 import express from 'express';
+import { EventPattern, Payload } from '@nestjs/microservices';
 
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
-  @Post('create-payment-session')
-  createPaymentSession(@Body() paymentSessionDto: PaymentSessionDto) {
+  // @Post('create-payment-session')
+  /*Stripe no está esperando confirmaciones ni validaciones
+  únicamente está emitiendo un evento. Entonces, cuando solamente se
+  necesita emitir un evento y no esperar ninguna respuesta se usa
+  @EventPattern, en lugar de @MessagePattern
+  */
+  @EventPattern({cmd: 'create.payment.session'})
+  createPaymentSession(@Payload() paymentSessionDto: PaymentSessionDto) {
     return this.paymentsService.createPaymentSession(paymentSessionDto);
   }
 
